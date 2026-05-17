@@ -5,7 +5,7 @@ from typing import Dict, List
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from mistralai import Mistral
+from mistralai.client import Mistral   # ← ИСПРАВЛЕННЫЙ ИМПОРТ
 
 # ========================= НАСТРОЙКИ =========================
 TOKEN = os.getenv("TOKEN")
@@ -84,7 +84,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, interpret_dream))
 
-    print("🚀 Бот-толкователь снов успешно запущен на Bothost!")
+    print("🚀 Бот-толкователь снов на Mistral запущен!")
     app.run_polling()
 
 
