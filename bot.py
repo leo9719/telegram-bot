@@ -3,18 +3,17 @@ from telegram.ext import Application, MessageHandler, filters, ContextTypes
 import os
 import google.generativeai as genai
 
-# ================= НАСТРОЙКИ =================
 TOKEN = os.getenv("TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")   # ← добавим позже
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 if not TOKEN or not GEMINI_API_KEY:
-    print("❌ Ошибка: Не найдены TOKEN или GEMINI_API_KEY")
+    print("❌ Ошибка: TOKEN или GEMINI_API_KEY не найден!")
     exit(1)
 
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
-print("✅ Бот толкователь снов запущен!")
+print("✅ Бот успешно запущен!")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
@@ -27,18 +26,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         response = model.generate_content(
-            f"""Ты очень добрый, мудрый и теплый толкователь снов. 
-Отвечай по-русски, красиво, поддерживающе и понятно. 
-Не используй страшные и негативные трактовки.
+            f"""Ты опытный, добрый и мудрый толкователь снов. 
+Отвечай тепло, по-русски, красиво и поддерживающе. 
+Избегай негатива и страшных трактовок.
 
-Сон: {text}"""
+Сон человека: {text}
+
+Расшифруй его:"""
         )
-        await update.message.reply_text(response.text)
+        
+        answer = response.text.strip()
+        if answer:
+            await update.message.reply_text(answer)
+        else:
+            await update.message.reply_text("Не смог расшифровать этот сон... Расскажи подробнее?")
+            
     except Exception as e:
-        print(f"Ошибка: {e}")
-        await update.message.reply_text("😔 Что-то пошло не так... Попробуй чуть позже.")
+        print(f"Ошибка Gemini: {e}")
+        await update.message.reply_text("😔 Сейчас немного перегружено. Попробуй рассказать сон через пару минут.")
 
-# ================= ЗАПУСК =================
 app = Application.builder().token(TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
