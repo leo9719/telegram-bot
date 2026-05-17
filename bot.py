@@ -5,7 +5,7 @@ from typing import Dict, List
 
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from mistralai.client import Mistral   # ← САМЫЙ ВАЖНЫЙ ИСПРАВЛЕННЫЙ ИМПОРТ
+from mistralai.client import Mistral   # ← обязательно этот импорт
 
 # ========================= НАСТРОЙКИ =========================
 TOKEN = os.getenv("TOKEN")
@@ -14,79 +14,69 @@ MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY") or "1cHOyLt10uR3dQ2HhRPF4JYqZte5c
 MODEL = "mistral-large-latest"
 
 SYSTEM_PROMPT = """
-Ты — глубокий, эмпатичный и мудрый толкователь снов с психологическим и архетипическим подходом.
-Отвечай живо, вдохновляюще, но не слишком длинно (максимум 6–8 предложений).
-Используй эмодзи умеренно.
-Если сна мало деталей — задай 1–2 уточняющих вопроса.
-Никогда не говори «это просто сон» или «ничего не значит».
+Ты — опытный толкователь снов. Отвечай интересно, по делу, с лёгким психологическим уклоном.
+Максимум 7-8 предложений. Используй эмодзи умеренно.
+Если сна мало деталей — задай уточняющие вопросы.
 """
 
 chat_histories: Dict[int, List[dict]] = {}
 
 # ============================================================
 
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO
-)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 client = Mistral(api_key=MISTRAL_API_KEY)
 
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 Привет! Я — толкователь снов на Mistral AI.\n\n"
-        "Расскажи свой сон как можно подробнее, и я помогу его разгадать ✨"
-    )
-
+    await update.message.reply_text("👋 Привет! Я толкователь снов на Mistral.\nРасскажи свой сон ✨")
 
 async def interpret_dream(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_text = update.message.text.strip()
+    text = update.message.text.strip()
     chat_id = update.message.chat_id
+
+    logger.info(f"→ Сообщение от {chat_id}: {text[:100]}...")
 
     if chat_id not in chat_histories:
         chat_histories[chat_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
 
-    chat_histories[chat_id].append({"role": "user", "content": user_text})
+    chat_histories[chat_id].append({"role": "user", "content": text})
 
     await update.message.chat.send_action("typing")
 
     try:
-        response = client.chat.complete(
+        resp = client.chat.complete(
             model=MODEL,
             messages=chat_histories[chat_id],
-            temperature=0.75,
-            max_tokens=900,
+            temperature=0.7,
+            max_tokens=800,
         )
-
-        answer = response.choices[0].message.content
+        answer = resp.choices[0].message.content
 
         chat_histories[chat_id].append({"role": "assistant", "content": answer})
 
-        if len(chat_histories[chat_id]) > 15:
-            chat_histories[chat_id] = [chat_histories[chat_id][0]] + chat_histories[chat_id][-14:]
+        # Ограничиваем историю
+        if len(chat_histories[chat_id]) > 14:
+            chat_histories[chat_id] = [chat_histories[chat_id][0]] + chat_histories[chat_id][-13:]
 
         await update.message.reply_text(answer, parse_mode="Markdown")
+        logger.info("✓ Ответ отправлен")
 
     except Exception as e:
-        logger.error(f"Ошибка Mistral: {e}", exc_info=True)
-        await update.message.reply_text("😔 Mistral сейчас не отвечает. Попробуй через минуту.")
-
+        logger.error(f"Ошибка: {e}", exc_info=True)
+        await update.message.reply_text("😔 Mistral не отвечает. Попробуй через 30 секунд.")
 
 def main():
     if not TOKEN:
         logger.error("TOKEN не найден!")
         return
 
-    app = Application.builder().token(TOKEN).build()
+    application = Application.builder().token(TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, interpret_dream))
 
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, interpret_dream))
-
-    print("🚀 Бот запущен! Ждём сообщения...")
-    app.run_polling()
-
+    logger.info("🚀 Бот запущен на Bothost (GitHub)")
+    application.run_polling()
 
 if __name__ == "__main__":
     asyncio.run(main())
