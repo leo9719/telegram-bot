@@ -1,2 +1,2 @@
 python-telegram-bot>=21.0
-mistralai==2.4.5
+mistralai==1.2.0
