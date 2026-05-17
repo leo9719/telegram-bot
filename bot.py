@@ -1,50 +1,57 @@
 from telegram import Update
 from telegram.ext import Application, MessageHandler, filters, ContextTypes
 import os
-import google.generativeai as genai
+import random
 
 TOKEN = os.getenv("TOKEN")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-if not TOKEN or not GEMINI_API_KEY:
-    print("❌ Ошибка: Нет TOKEN или GEMINI_API_KEY")
+if not TOKEN:
+    print("❌ TOKEN не найден!")
     exit(1)
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+print("✅ Бот 'Мир Сновидений' запущен!")
 
-print("✅ Бот запущен!")
+# База знаний для толкования снов
+DREAM_TEMPLATES = {
+    "летать": ["Ты летал? Это отличный знак свободы и уверенности в себе! Твоя душа хочет большего.", 
+               "Полёт во сне — символ того, что ты растешь и преодолеваешь ограничения."],
+    "падать": ["Падение часто означает страх потери контроля. Возможно, в жизни есть ситуация, которую ты боишься отпустить."],
+    "преследовать": ["Тебя кто-то преследовал? Это может быть нерешённая проблема или страх, от которого ты убегаешь."],
+    "вода": ["Вода — символ эмоций. Чистая = спокойствие, мутная = внутренние переживания."],
+    "зубы": ["Выпадение зубов часто связано со страхом потери внешнего вида, уверенности или контроля."],
+    "умер": ["Смерть во сне — почти всегда символ трансформации и нового этапа в жизни."],
+    "школа": ["Школа или экзамен — подсознание проверяет, готов ли ты к новым вызовам."],
+}
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text.strip()
+    text = update.message.text.lower().strip()
 
-    if len(text) < 10:
+    if len(text) < 8:
         await update.message.reply_text("Расскажи сон подробнее, пожалуйста 😊")
         return
 
-    await update.message.reply_text("🔮 Анализирую твой сон...")
+    await update.message.reply_text("🔮 Думаю над твоим сном...")
 
-    try:
-        prompt = f"""Ты добрый и мудрый толкователь снов. 
-Отвечай тепло, по-русски, позитивно и понятно. 
-Не используй страшные трактовки.
+    # Ищем ключевые слова
+    response = None
+    for keyword, answers in DREAM_TEMPLATES.items():
+        if keyword in text:
+            response = random.choice(answers)
+            break
 
-Сон: {text}
+    # Если ничего не нашли — общий ответ
+    if not response:
+        responses = [
+            "Интересный сон... Он говорит о твоём внутреннем желании изменений и свободы.",
+            "Твой сон символизирует переход на новый этап жизни. Что ты чувствовал во сне?",
+            "Подсознание подсказывает тебе обратить внимание на свои эмоции и желания.",
+            "Этот сон — знак, что ты готов к чему-то большему. Что ты думаешь об этом?",
+            "Красивый сон. В нём много символов роста и саморазвития."
+        ]
+        response = random.choice(responses)
 
-Толкование:"""
+    await update.message.reply_text(response)
 
-        response = model.generate_content(prompt, 
-                                         generation_config={"temperature": 0.7})
-        
-        answer = response.text.strip()
-        if answer:
-            await update.message.reply_text(answer)
-        else:
-            await update.message.reply_text("Не получилось расшифровать... Расскажи сон подробнее?")
-            
-    except Exception as e:
-        print(f"❌ Ошибка Gemini: {e}")
-        await update.message.reply_text("😔 Сейчас Gemini немного перегружен. Попробуй через 10–20 секунд.")
 
 app = Application.builder().token(TOKEN).build()
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
