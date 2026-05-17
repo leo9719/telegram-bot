@@ -1,103 +1,92 @@
-from telegram import Update
-from telegram.ext import Application, MessageHandler, filters, ContextTypes
+import asyncio
+import logging
 import os
-import random
+from typing import Dict, List
 
-TOKEN = os.getenv(TOKEN)
+from telegram import Update
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from mistralai import Mistral
 
-if not TOKEN
-    print(❌ TOKEN не найден!)
-    exit(1)
+# ========================= НАСТРОЙКИ =========================
+TOKEN = os.getenv("TOKEN")
+MISTRAL_API_KEY = os.getenv("MISTRAL_API_KEY") or "1cHOyLt10uR3dQ2HhRPF4JYqZte5cgnd"
 
-print(✅ Супер толкователь снов запущен!)
+MODEL = "mistral-large-latest"
 
-def interpret_dream(dream str) - str
-    text = dream.lower()
-    
-    intro = 🔮 Я очень внимательно и глубоко проанализировал твой сон.
+SYSTEM_PROMPT = """
+Ты — глубокий, эмпатичный и мудрый толкователь снов с психологическим и архетипическим подходом.
+Отвечай живо, вдохновляюще, но не слишком длинно (максимум 6–8 предложений).
+Используй эмодзи умеренно.
+Если сна мало деталей — задай 1–2 уточняющих вопроса.
+Никогда не говори «это просто сон» или «ничего не значит».
+"""
 
-    analysis = []
+chat_histories: Dict[int, List[dict]] = {}
 
-    # ================= ГЛУБОКИЕ ТОЛКОВАНИЯ =================
-    if any(w in text for w in [летал, летать, полет, летаю, взлет, парю, небо])
-        analysis.append(
-            Полёт — это один из самых сильных и позитивных архетипов. 
-            Твоя душа сейчас активно стремится к свободе, расширению и реализации своего потенциала. 
-            Скорее всего, в реальной жизни ты чувствуешь, что готов к большему, чем имеешь сейчас — будь то новые возможности, отношения, саморазвитие или изменение образа жизни. 
-            Подсознание показывает внутренние ограничения, которые ты сам на себя наложил, уже можно снимать.
-        )
+# ============================================================
 
-    if any(w in text for w in [падал, падать, упал, сорвался])
-        analysis.append(
-            Падение — очень честный сон. Он отражает текущий страх потери контроля над своей жизнью. 
-            Возможно, ты находишься в ситуации, где многое зависит не от тебя, или боишься, что важные вещи могут «рухнуть». 
-            Это сигнал психики пора перестать держаться только за внешнюю стабильность и начать больше доверять себе и процессу жизни.
-        )
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO
+)
+logger = logging.getLogger(__name__)
 
-    if any(w in text for w in [преслед, гонял, убегал, погоня])
-        analysis.append(
-            Преследование — это классическая встреча с подавленной частью себя. 
-            То, от чего ты убегаешь во сне, почти всегда является твоим собственным страхом, виной, стыдом или нерешённой травмой. 
-            Сон мягко, но настойчиво говорит пришло время перестать убегать и посмотреть этому «монстру» в глаза. Только так можно его исцелить.
-        )
+client = Mistral(api_key=MISTRAL_API_KEY)
 
-    if any(w in text for w in [вода, море, река, океан, тонуть, плыл])
-        analysis.append(
-            Вода — это прямое отражение твоего эмоционального мира. 
-            Если вода была чистой и спокойной — внутри тебя идёт процесс исцеления и примирения. 
-            Если бурной, тёмной или ты тонул — значит, сейчас в тебе очень много сильных эмоций (гнев, грусть, тревога, желание), которые ты, возможно, стараешься контролировать или подавлять днём.
-        )
 
-    if any(w in text for w in [зуб, зубы, выпал])
-        analysis.append(
-            Зубы символизируют личную силу, уверенность и способность проявлять себя в мире. 
-            Выпадение зубов часто появляется в периоды, когда человек чувствует себя уязвимым, боится потерять привлекательность, статус или контроль над ситуацией.
-        )
-
-    if any(w in text for w in [умер, смерть, погиб, хоронил])
-        analysis.append(
-            Смерть во сне — это почти всегда мощная трансформация. 
-            Часть твоей старой личности, старых убеждений или старого образа жизни умирает. 
-            Ты сейчас находишься в очень важном переходном периоде, даже если внешне всё выглядит обычно.
-        )
-
-    # Если ничего конкретного не нашлось
-    if not analysis
-        analysis.append(
-            Твой сон — это глубокое послание подсознания. Сейчас в твоей жизни идёт важный внутренний процесс. 
-            Ты перерабатываешь накопленный опыт, эмоции и готовиться к следующему этапу.
-        )
-
-    main = nn.join(analysis)
-
-    conclusion = (
-        nn💭 Что это значит для тебя прямо сейчасn
-        Скорее всего, ты находишься в переходном периоде жизни — старое уже не удовлетворяет, а новое ещё не сформировалось окончательно. 
-        Сон помогает тебе лучше услышать свои настоящие желания, страхи и потребности.nn
-        Рекомендую задать себе вопросыn
-        • Какие эмоции были самыми сильными во снеn
-        • Что в этом сне особенно сильно зацепилоn
-        • Есть ли в моей текущей жизни что-то, что перекликается с этим сном
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        "👋 Привет! Я — толкователь снов на Mistral AI.\n\n"
+        "Расскажи свой сон как можно подробнее, и я помогу его разгадать ✨"
     )
 
-    return f{intro}nn{main}{conclusion}
+
+async def interpret_dream(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_text = update.message.text.strip()
+    chat_id = update.message.chat_id
+
+    if chat_id not in chat_histories:
+        chat_histories[chat_id] = [{"role": "system", "content": SYSTEM_PROMPT}]
+
+    chat_histories[chat_id].append({"role": "user", "content": user_text})
+
+    await update.message.chat.send_action("typing")
+
+    try:
+        response = client.chat.complete(
+            model=MODEL,
+            messages=chat_histories[chat_id],
+            temperature=0.75,
+            max_tokens=900,
+        )
+
+        answer = response.choices[0].message.content
+
+        chat_histories[chat_id].append({"role": "assistant", "content": answer})
+
+        if len(chat_histories[chat_id]) > 15:
+            chat_histories[chat_id] = [chat_histories[chat_id][0]] + chat_histories[chat_id][-14:]
+
+        await update.message.reply_text(answer, parse_mode="Markdown")
+
+    except Exception as e:
+        logger.error(f"Mistral error: {e}")
+        await update.message.reply_text("😔 Mistral сейчас не отвечает. Попробуй чуть позже.")
 
 
-async def handle_message(update Update, context ContextTypes.DEFAULT_TYPE)
-    text = update.message.text.strip()
-
-    if len(text)  10
-        await update.message.reply_text(Пожалуйста, расскажи сон максимально подробно 😊)
+def main():
+    if not TOKEN:
+        logger.error("TOKEN не найден в переменных окружения!")
         return
 
-    await update.message.reply_text(🔮 Я глубоко анализирую твой сон...)
+    app = Application.builder().token(TOKEN).build()
 
-    result = interpret_dream(text)
-    await update.message.reply_text(result)
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, interpret_dream))
+
+    print("🚀 Бот-толкователь снов успешно запущен на Bothost!")
+    app.run_polling()
 
 
-app = Application.builder().token(TOKEN).build()
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-print(🚀 Бот работает...)
-app.run_polling()
+if __name__ == "__main__":
+    asyncio.run(main())
